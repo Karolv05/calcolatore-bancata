@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Calcolatore Bancata Multipla per Eventi</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f4f4f4;
+      color: #333;
+    }
+    h1, h2 {
+      font-size: 22px;
+      margin-bottom: 15px;
+      color: #007bff;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 10px;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .evento {
+      background: #ffffff;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 15px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      position: relative;
+    }
+    button {
+      margin-top: 10px;
+      padding: 12px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .rimuovi {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #dc3545;
+      color: white;
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+    .result {
+      margin-top: 25px;
+      padding: 15px;
+      background-color: #e9f7ef;
+      border-left: 5px solid #28a745;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Calcolatore Bancata Multipla per Eventi</h1>
+
+  <label for="stake">Importo Totale Puntata Multipla (€):</label>
+  <input type="number" id="stake" step="0.01" />
+
+  <label for="rimborso">Rimborso in caso di perdita (€):</label>
+  <input type="number" id="rimborso" step="0.01" value="0" />
+
+  <div id="eventi"></div>
+
+  <button onclick="aggiungiEvento()">➕ Aggiungi Evento</button>
+  <button onclick="calcola()">Calcola</button>
+  <button onclick="salvaMultipla()">💾 Salva questa multipla</button>
+
+  <div class="result" id="output"></div>
+
+  <h2>Multiple salvate</h2>
+  <div id="multipleSalvate"></div>
+
+  <script>
+    let contatoreEventi = 0;
+    let listaMultiple = [];
+
+    function aggiungiEvento() {
+      contatoreEventi++;
+      const container = document.getElementById("eventi");
+
+      const div = document.createElement("div");
+      div.className = "evento";
+      div.id = `evento${contatoreEventi}`;
+      div.innerHTML = `
+        <label>Evento ${contatoreEventi}:</label>
+        Quota Bookmaker: <input type="number" id="qBook${contatoreEventi}" step="0.01" />
+        Quota Bancata: <input type="number" id="qLay${contatoreEventi}" step="0.01" />
+        <button class="rimuovi" onclick="rimuoviEvento(${contatoreEventi})">Rimuovi</button>
+      `;
+      container.appendChild(div);
+    }
+
+    function rimuoviEvento(id) {
+      const evento = document.getElementById(`evento${id}`);
+      if (evento) evento.remove();
+    }
+
+    function calcola() {
+      const stake = parseFloat(document.getElementById("stake").value);
+      const rimborso = parseFloat(document.getElementById("rimborso").value) || 0;
+      const commissione = 0.045;
+      const eventi = document.querySelectorAll(".evento");
+
+      let qBook = [];
+      let qLay = [];
+
+      eventi.forEach(evento => {
+        const qBookInput = evento.querySelector(`[id^=qBook]`);
+        const qLayInput = evento.querySelector(`[id^=qLay]`);
+        const book = parseFloat(qBookInput.value);
+        const lay = parseFloat(qLayInput.value);
+        if (!isNaN(book) && !isNaN(lay)) {
+          qBook.push(book);
+          qLay.push(lay);
+        }
+      });
+
+      if (isNaN(stake) || qBook.length !== eventi.length || qLay.length !== eventi.length) {
+        document.getElementById("output").innerHTML =
+          "<span style='color: red;'>Inserisci tutte le quote e l'importo.</span>";
+        return;
+      }
+
+      let quotaTotale = qBook.reduce((acc, val) => acc * val, 1);
+      let vincitaBook = stake * (quotaTotale - 1);
+
+      let html = `<strong>Quota totale multipla: ${quotaTotale.toFixed(2)}</strong><br><br>`;
+
+      let bancate = [];
+
+      qBook.forEach((qb, i) => {
+        const ql = qLay[i];
+        const quotaParziale = qBook.slice(0, i + 1).reduce((a, b) => a * b, 1);
+        const vincitaParziale = stake * (quotaParziale - 1);
+        const bancata = (vincitaParziale + stake - rimborso) / ((ql - 1) + (1 - commissione));
+        const responsabilita = bancata * (ql - 1);
+
+        bancate.push({ bancata, responsabilita });
+
+        html += `
+          ➤ Evento ${i + 1}:<br>
+          - Quota bookmaker: ${qb}<br>
+          - Quota lay: ${ql}<br>
+          - Bancata: <strong>€${bancata.toFixed(2)}</strong><br>
+          - Responsabilità: €${responsabilita.toFixed(2)}<br><br>
+        `;
+      });
+
+      let profitti = [];
+
+      for (let i = 0; i < bancate.length; i++) {
+        let profitto = (bancate[i].bancata * (1 - commissione)) - (stake - rimborso);
+        profitti.push(`✔️ Bancata vince all'evento ${i + 1}: <strong>€${profitto.toFixed(2)}</strong>`);
+      }
+
+      const responsabilitaTotale = bancate.reduce((sum, b) => sum + b.responsabilita, 0);
+      const profittoBook = vincitaBook - responsabilitaTotale;
+      profitti.push(`✔️ Bookmaker vince tutta la multipla: <strong>€${profittoBook.toFixed(2)}</strong>`);
+
+      html += `<strong>💼 Profitto finale in base all'esito:</strong><br>` + profitti.join("<br>");
+
+      document.getElementById("output").innerHTML = html;
+    }
+
+    function salvaMultipla() {
+      const eventi = document.querySelectorAll(".evento");
+      if (eventi.length < 3) {
+        alert("Per salvare una multipla devi avere almeno 3 eventi.");
+        return;
+      }
+
+      let multipla = [];
+      let valid = true;
+
+      eventi.forEach(evento => {
+        const qBookInput = evento.querySelector(`[id^=qBook]`);
+        const qLayInput = evento.querySelector(`[id^=qLay]`);
+        const book = parseFloat(qBookInput.value);
+        const lay = parseFloat(qLayInput.value);
+
+        if (isNaN(book) || isNaN(lay)) {
+          valid = false;
+        }
+
+        multipla.push({ quotaBook: book, quotaLay: lay });
+      });
+
+      if (!valid) {
+        alert("Assicurati di aver inserito tutte le quote per ciascun evento.");
+        return;
+      }
+
+      const multiplaDaSalvare = multipla.slice(0, 3);
+      listaMultiple.push(multiplaDaSalvare);
+      mostraMultipleSalvate();
+    }
+
+    function mostraMultipleSalvate() {
+      const container = document.getElementById("multipleSalvate");
+      container.innerHTML = "";
+
+      listaMultiple.forEach((multipla, index) => {
+        const div = document.createElement("div");
+        div.style.background = "#fff";
+        div.style.padding = "10px";
+        div.style.margin = "10px 0";
+        div.style.border = "1px solid #ccc";
+        div.style.borderRadius = "5px";
+
+        let html = `<strong>Multipla ${index + 1}</strong><ul>`;
+        multipla.forEach((evento, i) => {
+          html += `<li>Evento ${i + 1}: Quota Bookmaker = ${evento.quotaBook}, Quota Lay = ${evento.quotaLay}</li>`;
+        });
+        html += "</ul>";
+        html += `<button onclick="eliminaMultipla(${index})" style="background:red;color:white;padding:5px 10px;border:none;border-radius:4px;">Elimina</button>`;
+
+        div.innerHTML = html;
+        container.appendChild(div);
+      });
+    }
+
+    function eliminaMultipla(index) {
+      listaMultiple.splice(index, 1);
+      mostraMultipleSalvate();
+    }
+
+    // Carica 3 eventi iniziali
+    aggiungiEvento();
+    aggiungiEvento();
+    aggiungiEvento();
+  </script>
+</body>
+</html>
